@@ -229,16 +229,16 @@ const slides: Slide[] = [
       <div className="text-center">
         <p className="text-2xl font-semibold text-white/70 sm:text-3xl">Si tienen un grupo de WhatsApp con plata de por medio, ya saben…</p>
         <h1 className="mt-6 animate-rise text-5xl font-extrabold tracking-tight [animation-delay:400ms] sm:text-7xl">
-          Cuentas claras,
+          La plata del grupo,
           <br />
-          <span className="text-brand-100">comunidad larga.</span>
+          <span className="text-brand-100">a la vista del grupo.</span>
         </h1>
         <a
           href="#/"
           onClick={(e) => e.stopPropagation()}
           className="mt-10 inline-flex animate-rise items-center rounded-xl bg-white px-8 py-4 text-lg font-bold text-brand-900 shadow-sm transition [animation-delay:900ms] hover:bg-brand-50"
         >
-          Entrar a Cuentas Claras →
+          Entrar a Pozo →
         </a>
       </div>
     ),
@@ -272,7 +272,7 @@ export default function Pitch({ step }: { step: number }) {
     >
       <div className="flex items-center justify-between px-6 pt-5 text-sm font-semibold opacity-60">
         <span className="flex items-center gap-2">
-          <img src="/favicon.svg" alt="" className="size-6" /> Cuentas Claras
+          <img src="/favicon.svg" alt="" className="size-6" /> Pozo
         </span>
         <span className="num">
           {i + 1} / {slides.length}

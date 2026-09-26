@@ -1,6 +1,6 @@
-# Cuentas Claras
+# Pozo
 
-**Colectas comunitarias con cuentas claras, sobre Stellar.**
+**La plata del grupo, a la vista del grupo. Sobre Stellar.**
 Cada aporte y cada gasto queda en un libro de cuentas público, y ningún pago sale sin la firma de 2 de 3 responsables.
 Es la tesorería del grupo de WhatsApp: quién puede mover la plata, cómo se entera el grupo y qué pasa con lo que sobra.
 

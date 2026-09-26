@@ -58,12 +58,12 @@ export default function Landing() {
       <section className="mx-auto grid max-w-6xl items-center gap-12 px-4 pb-16 pt-12 md:grid-cols-[1.1fr_1fr] md:pt-20">
         <div className="animate-rise">
           <p className="mb-4 inline-flex items-center gap-2 rounded-full bg-brand-50 px-3 py-1 text-sm font-semibold text-brand-700">
-            Colectas comunitarias sobre Stellar
+            La tesorería del grupo de WhatsApp · sobre Stellar
           </p>
           <h1 className="text-4xl font-extrabold leading-[1.05] tracking-tight sm:text-6xl">
-            Cuentas claras,
+            La plata del grupo,
             <br />
-            <span className="text-brand-700">comunidad larga.</span>
+            <span className="text-brand-700">a la vista del grupo.</span>
           </h1>
           <p className="mt-5 max-w-xl text-lg text-stone-600">
             Reúne dinero para el comedor del barrio, el club o el viaje de fin de curso sin tener que “confiar en el tesorero”. Cada aporte y cada gasto queda a
@@ -152,7 +152,7 @@ export default function Landing() {
                 <th className="p-4 font-semibold" />
                 <th className="p-4 font-semibold">Plataformas de colecta</th>
                 <th className="p-4 font-semibold">Grupo de WhatsApp + transferencia</th>
-                <th className="p-4 font-bold text-brand-700">Cuentas Claras</th>
+                <th className="p-4 font-bold text-brand-700">Pozo</th>
               </tr>
             </thead>
             <tbody>

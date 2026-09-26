@@ -17,7 +17,7 @@ export default function App() {
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-4">
           <a href="#/" className="flex items-center gap-2.5 font-extrabold tracking-tight">
             <img src="/favicon.svg" alt="" className="size-8" />
-            <span className="text-lg">Cuentas Claras</span>
+            <span className="text-lg">Pozo</span>
           </a>
           <div className="flex items-center gap-2">
             <span className="hidden items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-900 sm:inline-flex">
