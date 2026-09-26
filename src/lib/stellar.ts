@@ -166,13 +166,20 @@ export async function sendPayment(fromSecret: string, destination: string, amoun
 
 // ---------- Gastos multifirma ----------
 
-// El organizador arma el pago desde la cuenta de la colecta y lo firma (1 de 2 firmas necesarias).
+// Memo con el que se marcan las devoluciones en el libro de cuentas.
+export const REFUND_MEMO = 'Devolución proporcional'
+// Límite de operaciones por transacción en Stellar.
+export const MAX_OPS = 100
+
+// El organizador arma el pago (o varios pagos, en una sola transacción atómica) desde la cuenta
+// de la colecta y lo firma (1 de 2 firmas necesarias).
 // Sin vencimiento, para que el/la cotitular pueda aprobarlo cuando lo revise.
-export async function buildExpense(treasury: string, destination: string, amount: string, concept: string, signerSecret: string) {
+export async function buildPayout(treasury: string, payments: { destination: string; amount: string }[], concept: string, signerSecret: string) {
   try {
     const account = await server.loadAccount(treasury)
-    const tx = new TransactionBuilder(account, { fee: BASE_FEE, networkPassphrase: NETWORK })
-      .addOperation(Operation.payment({ destination, asset: Asset.native(), amount }))
+    const b = new TransactionBuilder(account, { fee: BASE_FEE, networkPassphrase: NETWORK })
+    for (const p of payments) b.addOperation(Operation.payment({ destination: p.destination, asset: Asset.native(), amount: p.amount }))
+    const tx = b
       .addMemo(Memo.text(clampMemo(concept)))
       .setTimeout(TimeoutInfinite)
       .build()
@@ -252,7 +259,7 @@ export async function loadCampaign(address: string): Promise<Campaign> {
 
 export interface LedgerEntry {
   id: string
-  kind: 'in' | 'out' | 'created'
+  kind: 'in' | 'out' | 'refund' | 'created'
   amount: number
   counterparty: string
   memo: string
@@ -279,7 +286,8 @@ export async function loadLedger(address: string): Promise<LedgerEntry[]> {
       out.push({ ...base, kind: 'created', amount: Number(r.starting_balance), counterparty: r.funder as string })
     } else if (r.type === 'payment' && r.asset_type === 'native') {
       const incoming = r.to === address
-      out.push({ ...base, kind: incoming ? 'in' : 'out', amount: Number(r.amount), counterparty: (incoming ? r.from : r.to) as string })
+      const kind = incoming ? 'in' : base.memo === REFUND_MEMO ? 'refund' : 'out'
+      out.push({ ...base, kind, amount: Number(r.amount), counterparty: (incoming ? r.from : r.to) as string })
     }
   }
   return out

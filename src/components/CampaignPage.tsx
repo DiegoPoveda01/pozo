@@ -43,10 +43,11 @@ export default function CampaignPage({ address }: { address: string }) {
 
   const stats = useMemo(() => {
     const ins = ledger?.filter((e) => e.kind === 'in') ?? []
-    const outs = ledger?.filter((e) => e.kind === 'out') ?? []
-    const raised = ins.reduce((a, e) => a + e.amount, 0)
-    const spent = outs.reduce((a, e) => a + e.amount, 0)
-    return { raised, spent, available: raised - spent, donations: ins.length, donors: new Set(ins.map((e) => e.counterparty)).size }
+    const sum = (kind: LedgerEntry['kind']) => (ledger ?? []).filter((e) => e.kind === kind).reduce((a, e) => a + e.amount, 0)
+    const raised = sum('in')
+    const spent = sum('out')
+    const refunded = sum('refund')
+    return { raised, spent, refunded, available: raised - spent - refunded, donations: ins.length }
   }, [ledger])
 
   if (!campaign || !ledger) {
@@ -111,12 +112,17 @@ export default function CampaignPage({ address }: { address: string }) {
             <Stat label="Gastado" value={stats.spent} tone="text-rose-600" />
             <Stat label="Disponible" value={stats.available} tone="text-brand-700" />
           </dl>
+          {stats.refunded > 0 && (
+            <p className="mt-3 text-sm text-stone-600">
+              <span className="num font-bold text-sky-700">{fmt(stats.refunded)} XLM</span> devueltos a los aportantes en proporción a lo que pusieron.
+            </p>
+          )}
         </Card>
 
         <aside className="space-y-6 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:self-start">
           <DonateCard treasury={address} onDonated={refresh} />
-          <TreasuryCard campaign={campaign} keys={keys} available={stats.available} onChanged={refresh} />
-          <ShareCard address={address} />
+          <TreasuryCard campaign={campaign} keys={keys} available={stats.available} donations={ledger.filter((e) => e.kind === 'in')} onChanged={refresh} />
+          <ShareCard address={address} report={report(campaign, stats, ledger)} />
         </aside>
 
         <div className="lg:col-start-1 lg:row-start-2 lg:self-start">
@@ -125,6 +131,21 @@ export default function CampaignPage({ address }: { address: string }) {
       </div>
     </div>
   )
+}
+
+// Mensaje de rendición listo para pegar en el grupo de WhatsApp de la colecta.
+function report(c: Campaign, s: { raised: number; spent: number; refunded: number; available: number; donations: number }, ledger: LedgerEntry[]) {
+  const last = ledger.find((e) => e.kind === 'out')
+  const lines = [
+    `*${c.title}* · rendición de cuentas`,
+    `Recaudado: ${fmt(s.raised)} XLM (${s.donations} aportes)`,
+    `Gastado: ${fmt(s.spent)} XLM`,
+    s.refunded > 0 ? `Devuelto a aportantes: ${fmt(s.refunded)} XLM` : '',
+    `Disponible: ${fmt(s.available)} XLM`,
+    last ? `Último gasto: ${fmt(last.amount)} XLM → ${c.vendors[last.counterparty] ?? short(last.counterparty)} (${last.signatures} firmas)` : '',
+    `Ningún pago sale sin ${c.thresholds.med} de ${c.signers.length} firmas. Cada movimiento se verifica en Stellar:`,
+  ]
+  return lines.filter(Boolean).join('\n')
 }
 
 function Stat({ label, value, tone = 'text-ink' }: { label: string; value: number; tone?: string }) {
@@ -139,6 +160,15 @@ function Stat({ label, value, tone = 'text-ink' }: { label: string; value: numbe
 }
 
 function Ledger({ entries, campaign, fresh }: { entries: LedgerEntry[]; campaign: Campaign; fresh: Set<string> }) {
+  // Una devolución son varios pagos en la misma transacción: se muestran como una sola fila.
+  const rows: (LedgerEntry & { count: number })[] = []
+  for (const e of entries) {
+    const last = rows[rows.length - 1]
+    if (e.kind === 'refund' && last?.kind === 'refund' && last.hash === e.hash) {
+      last.amount += e.amount
+      last.count += 1
+    } else rows.push({ ...e, count: 1 })
+  }
   return (
     <Card className="p-0 sm:p-0">
       <div className="flex items-end justify-between gap-4 border-b border-stone-100 p-5 sm:p-6">
@@ -151,35 +181,52 @@ function Ledger({ entries, campaign, fresh }: { entries: LedgerEntry[]; campaign
         <p className="p-8 text-center text-stone-500">Aún no hay movimientos. ¡Sé el primero en aportar!</p>
       ) : (
         <ul className="divide-y divide-stone-100">
-          {entries.map((e) => {
+          {rows.map((e) => {
             const vendor = campaign.vendors[e.counterparty]
-            const title = e.kind === 'created' ? 'Colecta creada en Stellar' : e.kind === 'in' ? e.memo || 'Aporte anónimo' : (vendor ?? short(e.counterparty))
+            const title =
+              e.kind === 'created'
+                ? 'Colecta creada en Stellar'
+                : e.kind === 'in'
+                  ? e.memo || 'Aporte anónimo'
+                  : e.kind === 'refund'
+                    ? `Devolución a ${e.count} ${e.count === 1 ? 'aporte' : 'aportes'}`
+                    : (vendor ?? short(e.counterparty))
             const sub =
               e.kind === 'created'
                 ? `Reserva técnica de la red (${fmt(e.amount)} XLM), no cuenta como aporte`
                 : e.kind === 'in'
                   ? `Aporte desde ${short(e.counterparty)}`
-                  : e.memo || 'Pago'
+                  : e.kind === 'refund'
+                    ? 'Lo que sobró, en proporción · una sola transacción'
+                    : e.memo || 'Pago'
             return (
               <li key={e.id} className={`flex items-center gap-3 px-5 py-4 sm:px-6 ${fresh.has(e.id) ? 'animate-flash' : ''}`}>
                 <span
                   className={`grid size-10 shrink-0 place-items-center rounded-full ${
-                    e.kind === 'in' ? 'bg-brand-50 text-brand-700' : e.kind === 'out' ? 'bg-rose-50 text-rose-600' : 'bg-stone-100 text-stone-500'
+                    e.kind === 'in'
+                      ? 'bg-brand-50 text-brand-700'
+                      : e.kind === 'out'
+                        ? 'bg-rose-50 text-rose-600'
+                        : e.kind === 'refund'
+                          ? 'bg-sky-50 text-sky-700'
+                          : 'bg-stone-100 text-stone-500'
                   }`}
                 >
-                  {e.kind === 'in' ? <Arrow down /> : e.kind === 'out' ? <Arrow /> : <Spark />}
+                  {e.kind === 'in' ? <Arrow down /> : e.kind === 'created' ? <Spark /> : <Arrow />}
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-semibold">{title}</p>
                   <p className="flex flex-wrap items-center gap-x-2 text-xs text-stone-500">
                     <span className="truncate">{sub}</span>
-                    {e.kind === 'out' && <span className="rounded-full bg-brand-50 px-2 py-0.5 font-semibold text-brand-700">✓ {e.signatures} firmas</span>}
+                    {(e.kind === 'out' || e.kind === 'refund') && (
+                      <span className="rounded-full bg-brand-50 px-2 py-0.5 font-semibold text-brand-700">✓ {e.signatures} firmas</span>
+                    )}
                     <span>· {timeAgo(e.createdAt)}</span>
                   </p>
                 </div>
                 <div className="text-right">
                   {e.kind !== 'created' && (
-                    <p className={`num font-bold ${e.kind === 'in' ? 'text-brand-700' : 'text-rose-600'}`}>
+                    <p className={`num font-bold ${e.kind === 'in' ? 'text-brand-700' : e.kind === 'refund' ? 'text-sky-700' : 'text-rose-600'}`}>
                       {e.kind === 'in' ? '+' : '−'}
                       {fmt(e.amount)}
                     </p>
@@ -197,7 +244,7 @@ function Ledger({ entries, campaign, fresh }: { entries: LedgerEntry[]; campaign
   )
 }
 
-function ShareCard({ address }: { address: string }) {
+function ShareCard({ address, report }: { address: string; report: string }) {
   const url = `${window.location.origin}${window.location.pathname}#/c/${address}`
   const [copied, setCopied] = useState(false)
   async function copy() {
@@ -226,6 +273,15 @@ function ShareCard({ address }: { address: string }) {
           </ExternalLink>
         </div>
       </div>
+      <a
+        href={`https://wa.me/?text=${encodeURIComponent(`${report}\n${url}`)}`}
+        target="_blank"
+        rel="noreferrer"
+        className="mt-4 flex w-full items-center justify-center rounded-xl bg-[#1f9d55] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#188a49]"
+      >
+        Enviar rendición por WhatsApp
+      </a>
+      <p className="mt-2 text-xs text-stone-500">Arma el resumen de la colecta con el enlace verificable; tú eliges el grupo antes de enviarlo.</p>
     </Card>
   )
 }

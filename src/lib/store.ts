@@ -27,6 +27,7 @@ export const getDonorSecret = () => read<string>('cc:donor')
 export const saveDonorSecret = (secret: string) => write('cc:donor', secret)
 
 export interface Proposal {
+  kind?: 'expense' | 'refund'
   xdr: string
   amount: string
   destination: string

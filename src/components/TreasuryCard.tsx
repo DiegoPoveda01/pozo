@@ -1,7 +1,20 @@
 import { useState, type FormEvent } from 'react'
 import { StrKey } from '@stellar/stellar-sdk'
 import { fmt, short } from '../lib/format'
-import { addSignature, buildExpense, byteLength, MEMO_MAX_BYTES, submitXdr, txUrl, StellarError, type Campaign, type CampaignKeys } from '../lib/stellar'
+import {
+  addSignature,
+  buildPayout,
+  byteLength,
+  MAX_OPS,
+  MEMO_MAX_BYTES,
+  REFUND_MEMO,
+  submitXdr,
+  txUrl,
+  StellarError,
+  type Campaign,
+  type CampaignKeys,
+  type LedgerEntry,
+} from '../lib/stellar'
 import { getProposal, saveProposal, type Proposal } from '../lib/store'
 import { Avatar, btn, Card, Check, ExternalLink, input, Modal, Spinner } from './ui'
 
@@ -11,15 +24,17 @@ export default function TreasuryCard({
   campaign,
   keys,
   available,
+  donations,
   onChanged,
 }: {
   campaign: Campaign
   keys: CampaignKeys | null
   available: number
+  donations: LedgerEntry[]
   onChanged: () => void
 }) {
   const [proposal, setProposal] = useState<Proposal | null>(() => getProposal(campaign.address))
-  const [modal, setModal] = useState(false)
+  const [modal, setModal] = useState<'expense' | 'refund' | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [result, setResult] = useState<Result>(null)
 
@@ -122,7 +137,9 @@ export default function TreasuryCard({
           </p>
         ) : proposal ? (
           <div className="rounded-xl border-2 border-amber-300 bg-amber-50/60 p-4">
-            <p className="text-xs font-bold uppercase tracking-wider text-amber-800">Gasto pendiente de aprobación</p>
+            <p className="text-xs font-bold uppercase tracking-wider text-amber-800">
+              {proposal.kind === 'refund' ? 'Devolución pendiente de aprobación' : 'Gasto pendiente de aprobación'}
+            </p>
             <p className="mt-1 font-bold">{proposal.concept}</p>
             <p className="text-sm text-stone-600">
               <span className="num font-bold text-ink">{fmt(Number(proposal.amount))} XLM</span> → {proposal.destinationName}
@@ -156,15 +173,27 @@ export default function TreasuryCard({
             </div>
           </div>
         ) : (
-          <button
-            className={`${btn.primary} w-full`}
-            onClick={() => {
-              setResult(null)
-              setModal(true)
-            }}
-          >
-            Proponer un gasto
-          </button>
+          <div className="space-y-2">
+            <button
+              className={`${btn.primary} w-full`}
+              onClick={() => {
+                setResult(null)
+                setModal('expense')
+              }}
+            >
+              Proponer un gasto
+            </button>
+            <button
+              className={`${btn.secondary} w-full`}
+              disabled={/* el redondeo hacia abajo deja stroops sueltos */ !(available >= 0.01) || donations.length === 0}
+              onClick={() => {
+                setResult(null)
+                setModal('refund')
+              }}
+            >
+              Devolver lo que sobra a los aportantes
+            </button>
+          </div>
         )}
 
         {result?.kind === 'rejected' && (
@@ -187,16 +216,29 @@ export default function TreasuryCard({
         )}
       </div>
 
-      {keys && organizer && modal && (
+      {keys && organizer && modal === 'expense' && (
         <ExpenseModal
-          open={modal}
-          onClose={() => setModal(false)}
+          open
+          onClose={() => setModal(null)}
           campaign={campaign}
           available={available}
           proposer={organizer}
           onCreated={(p) => {
             update(p)
-            setModal(false)
+            setModal(null)
+          }}
+        />
+      )}
+      {keys && organizer && modal === 'refund' && (
+        <RefundModal
+          onClose={() => setModal(null)}
+          campaign={campaign}
+          available={available}
+          donations={donations}
+          proposer={organizer}
+          onCreated={(p) => {
+            update(p)
+            setModal(null)
           }}
         />
       )}
@@ -243,8 +285,9 @@ function ExpenseModal({
     setBusy(true)
     setError(null)
     try {
-      const xdr = await buildExpense(campaign.address, destination, String(value), concept, proposer.secret)
+      const xdr = await buildPayout(campaign.address, [{ destination, amount: String(value) }], concept, proposer.secret)
       onCreated({
+        kind: 'expense',
         xdr,
         amount: String(value),
         destination,
@@ -307,6 +350,101 @@ function ExpenseModal({
           {busy ? <Spinner /> : null} Firmar propuesta como {proposer.name}
         </button>
       </form>
+    </Modal>
+  )
+}
+
+// Devuelve lo que queda en la colecta: a cada aporte le corresponde la misma proporción que puso.
+// Todos los pagos van en UNA transacción atómica: o reciben todos, o nadie.
+function RefundModal({
+  onClose,
+  campaign,
+  available,
+  donations,
+  proposer,
+  onCreated,
+}: {
+  onClose: () => void
+  campaign: Campaign
+  available: number
+  donations: LedgerEntry[]
+  proposer: CampaignKeys['signers'][number]
+  onCreated: (p: Proposal) => void
+}) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const raised = donations.reduce((a, d) => a + d.amount, 0)
+  const refunds = donations
+    .map((d) => ({
+      id: d.id,
+      name: d.memo || short(d.counterparty),
+      destination: d.counterparty,
+      gave: d.amount,
+      amount: Math.floor(((available * d.amount) / raised) * 1e7) / 1e7,
+    }))
+    .filter((r) => r.amount > 0)
+  const total = refunds.reduce((a, r) => a + r.amount, 0)
+  const tooMany = refunds.length > MAX_OPS
+
+  async function submit() {
+    setBusy(true)
+    setError(null)
+    try {
+      const payments = refunds.map((r) => ({ destination: r.destination, amount: r.amount.toFixed(7) }))
+      const xdr = await buildPayout(campaign.address, payments, REFUND_MEMO, proposer.secret)
+      onCreated({
+        kind: 'refund',
+        xdr,
+        amount: String(total),
+        destination: '',
+        destinationName: `${refunds.length} aportes, en proporción`,
+        concept: REFUND_MEMO,
+        signedBy: [proposer.publicKey],
+        createdAt: Date.now(),
+      })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error desconocido')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Modal open onClose={onClose} title="Devolver lo que sobra">
+      <p className="text-sm text-stone-600">
+        Quedan <strong className="num">{fmt(available)} XLM</strong>. Cada aporte recibe de vuelta la misma proporción que puso, en{' '}
+        <strong>una sola transacción</strong>: o reciben todos, o nadie.
+      </p>
+      <div className="mt-4 max-h-60 overflow-y-auto rounded-xl border border-stone-200">
+        <table className="w-full text-sm">
+          <thead className="sticky top-0 bg-stone-50 text-left text-xs text-stone-500">
+            <tr>
+              <th className="px-3 py-2 font-semibold">Aporte</th>
+              <th className="px-3 py-2 text-right font-semibold">Puso</th>
+              <th className="px-3 py-2 text-right font-semibold">Recibe</th>
+            </tr>
+          </thead>
+          <tbody>
+            {refunds.map((r) => (
+              <tr key={r.id} className="border-t border-stone-100">
+                <td className="max-w-40 truncate px-3 py-2 font-medium">{r.name}</td>
+                <td className="num px-3 py-2 text-right text-stone-500">{fmt(r.gave)}</td>
+                <td className="num px-3 py-2 text-right font-bold text-sky-700">{fmt(r.amount)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-3 text-xs text-stone-500">
+        {refunds.length} pagos por una comisión de red total de {(refunds.length / 1e5).toLocaleString('es', { maximumFractionDigits: 5 })} XLM. {proposer.name}{' '}
+        firma la propuesta (1 de 2); sale cuando otro firmante la aprueba.
+      </p>
+      {tooMany && <p className="mt-3 text-sm text-amber-700">Esta versión devuelve hasta {MAX_OPS} aportes por transacción.</p>}
+      {error && <p className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</p>}
+      <button className={`${btn.primary} mt-4 w-full`} disabled={busy || tooMany || refunds.length === 0} onClick={submit}>
+        {busy ? <Spinner /> : null} Firmar devolución como {proposer.name}
+      </button>
     </Modal>
   )
 }

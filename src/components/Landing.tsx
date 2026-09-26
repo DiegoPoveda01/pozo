@@ -31,7 +31,7 @@ const steps = [
   {
     n: '3',
     title: 'Cada gasto se aprueba y se publica',
-    body: 'Para pagarle a la ferretería, alguien propone y otro aprueba. El pago queda en un libro de cuentas que cualquiera puede verificar.',
+    body: 'Para pagarle a la ferretería, alguien propone y otro aprueba. El pago queda en un libro de cuentas que cualquiera puede verificar, y la rendición llega al grupo de WhatsApp con un toque. Si sobra, vuelve a cada aportante en proporción.',
   },
 ]
 
@@ -46,6 +46,7 @@ const compare = [
   ['Comisión por aporte', 'Hasta ~10%', 'Gratis, pero informal', '≈ 0 (comisión de red)'],
   ['Ver en qué se gastó', 'Depende del organizador', 'Capturas en el grupo', 'Cada pago, público'],
   ['Quién controla el dinero', 'El organizador', 'Una persona', '2 de 3 firmantes'],
+  ['Lo que sobra', 'Lo decide el organizador', 'Se pierde el rastro', 'Vuelve a cada aportante, en proporción'],
   ['Verificable por cualquiera', 'No', 'No', 'Sí, en la blockchain'],
 ]
 
@@ -66,7 +67,7 @@ export default function Landing() {
           </h1>
           <p className="mt-5 max-w-xl text-lg text-stone-600">
             Reúne dinero para el comedor del barrio, el club o el viaje de fin de curso sin tener que “confiar en el tesorero”. Cada aporte y cada gasto queda a
-            la vista de todos, y ningún pago sale sin la firma de dos personas.
+            la vista de todos, ningún pago sale sin la firma de dos personas y lo que sobra vuelve a quien lo puso.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <a href="#/crear" className={btn.primary}>
