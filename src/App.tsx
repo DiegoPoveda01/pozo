@@ -1,12 +1,15 @@
 import CampaignPage from './components/CampaignPage'
 import CreateCampaign from './components/CreateCampaign'
 import Landing from './components/Landing'
+import Pitch from './components/Pitch'
 import { btn } from './components/ui'
 import { useRoute } from './lib/format'
 
 export default function App() {
   const route = useRoute()
   const campaign = route.match(/^c\/(G[A-Z2-7]{55})$/)?.[1]
+  const pitch = route.match(/^pitch(?:\/(\d+))?$/)
+  if (pitch) return <Pitch step={Number(pitch[1] ?? 1)} />
 
   return (
     <div className="flex min-h-dvh flex-col">
