@@ -16,7 +16,7 @@ export default function App() {
       <header className="sticky top-0 z-40 border-b border-stone-200/70 bg-paper/85 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-4">
           <a href="#/" className="flex items-center gap-2.5 font-extrabold tracking-tight">
-            <img src="/favicon.svg" alt="" className="size-8" />
+            <img src="/favicon.svg" alt="" className="size-10" />
             <span className="text-lg">Pozo</span>
           </a>
           <div className="flex items-center gap-2">
